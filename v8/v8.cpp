@@ -484,7 +484,7 @@ int MesiboJsProcessor::mesibo_http_callback(void *cbdata, mesibo_int_t state,
 		mesibo_log(mod_, log_, "%.*s", b->datalen, b->buffer);
 		mesibo_log(mod_, log_, "\n JS Callback %s %p \n", b->http_cbdata, b->http_cb);
 		
-		//TO-DO: What if cb_data is itself an array, ie; argv[[],..]
+		//TO-DO: What if cb_data is itself an array, ie; argv[[], ..]
 		int argc = 3;
 		Local<Value> argv[3];
 		argv[0] = b->http_cbdata;
