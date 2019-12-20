@@ -600,7 +600,7 @@ static mesibo_int_t v8_on_message(mesibo_module_t *mod, mesibo_message_params_t 
 	np.to = p->from;
 	np.from = p->to;
 	np.id = rand();
-	const char* test_message = "Hello from Skeleton Module";
+	const char* test_message = "Hello from V8 Module";
 
         mesibo_message(mod, &np, test_message, strlen(message));
 
