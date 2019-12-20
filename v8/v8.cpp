@@ -135,6 +135,9 @@ using std::endl;
 #define MESIBO_MODULE_HTTP                      "mesibo_http"
 #define MESIBO_MODULE_LOG 			"mesibo_log"  
 
+typedef struct v8_config_s v8_config_t;
+typedef struct http_context_s http_context_t;
+
 class MesiboJsProcessor {
 	public:
 		MesiboJsProcessor(mesibo_module_t* mod, Isolate* isolate, const char* script, int log_level)
@@ -151,9 +154,16 @@ class MesiboJsProcessor {
 		//Callables from Javscript
 		static void LogCallback(const v8::FunctionCallbackInfo<v8::Value>& args); 
 		static void MessageCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
-
+		static void HttpCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
+		
 		//Debug-Interface	
 		int Log(const char* format, ...);
+		
+		//Module Configuration
+		mesibo_module_t* mod_;
+		const char* script_;//The /full/path/to/script
+		int log_; //log-level
+
 
 	private:
 		int ExecuteScript(Local<String> script);
@@ -162,19 +172,25 @@ class MesiboJsProcessor {
 		Isolate* isolate_;
 		Global<Context> context_; //Load base context from here 
 
-		//Module Configuration
-		mesibo_module_t* mod_;
-		const char* script_;//The /full/path/to/script
-		int log_; //log-level
-
 		//Utility methods for wrapping C++ objects as JavaScript objects,
 		// and going back again.
 
+		/*Messaging*/
 		Local<Object> WrapMessageParams(Local<Context>& context , 
 				mesibo_message_params_t* p);
-		static mesibo_message_params_t* UnwrapMessageParams(Isolate* isolate, 
+		static mesibo_message_params_t UnwrapMessageParams(Isolate* isolate, 
 				Local<Context> context, Local<Value> arg_params);
-
+		
+		/*Http*/
+		static module_http_option_t UnwrapHttpOptions(Isolate* isolate, 
+				Local<Context> context, Local<Value> arg_options);
+		static http_context_t* BundleHttpCallback(Isolate* isolate, 
+			       Local<Context> context, Local<Value> js_cb, 
+			       Local<Value> js_cbdata);	
+		static int mesibo_http_callback(void *cbdata, mesibo_int_t state,
+				mesibo_int_t progress, const char *buffer,
+				mesibo_int_t size);
+		
 		int WrapParamUint(Local<Context>& context, Local<Object> &js_params, 
 				const char* key, mesibo_uint_t value);
 		static mesibo_uint_t UnwrapParamUint(Isolate* isolate, 
@@ -190,16 +206,38 @@ class MesiboJsProcessor {
 		static Local<Value> GetParamValue(Isolate* isolate, 
 				Local<Context> context, const char* param_name,
 				Local<Object>params);
-
+		
+	
 		static mesibo_uint_t UnwrapUint(Isolate* isolate,
 				Local<Context>context, Local<Value>integer); 
 
 		static std::string UnwrapString(Isolate* isolate, 
-				Local<Context> context, Local<Value> byte_string, 
-				Local<Value>len);
+				Local<Context> context, Local<Value> byte_string);
 
 
 };
+
+/**
+ * Sample V8 Module Configuration
+ * Refer sample.conf
+ */
+struct v8_config_s{
+	const char* script;
+	int log; //log level
+	long last_changed; // Time Stamp
+	MesiboJsProcessor* ctx; // v8 context
+	std::unique_ptr<v8::Platform> platform; //v8 Platform
+};
+
+struct http_context_s {
+	char buffer[HTTP_BUFFER_LEN];
+	int datalen;	
+	MesiboJsProcessor* ctx_;
+	Local<Context> http_ctx;
+	Local<Object> http_cb;
+	Local<Value> http_cbdata;
+};
+
 
 int MesiboJsProcessor::Log(const char* format, ...) {
 	if(log_>= 0){ //Log-Level Specified in Configuration
@@ -210,28 +248,6 @@ int MesiboJsProcessor::Log(const char* format, ...) {
 	else
 		return 0;
 }
-
-/**
- * Sample V8 Module Configuration
- * Refer sample.conf
- */
-typedef struct v8_config_s{
-	const char* script;
-	int log; //log level
-	long last_changed; // Time Stamp
-	MesiboJsProcessor* ctx; // v8 context
-	std::unique_ptr<v8::Platform> platform; //v8 Platform
-} v8_config_t;
-
-typedef struct http_context_s {
-	mesibo_module_t *mod;
-	char buffer[HTTP_BUFFER_LEN];
-	int datalen;	
-	mesibo_message_params_t *params;
-	char *http_cb;
-	char *http_cbdata;
-	module_http_option_t* http_opt;
-} http_context_t;
 
 mesibo_uint_t MesiboJsProcessor::UnwrapUint(Isolate* isolate, Local<Context>context, 
 		Local<Value>integer){ 
@@ -247,7 +263,7 @@ mesibo_uint_t MesiboJsProcessor::UnwrapUint(Isolate* isolate, Local<Context>cont
 }
 
 std::string MesiboJsProcessor::UnwrapString(Isolate* isolate, Local<Context> context, 
-		Local<Value> byte_string , Local<Value>len){
+		Local<Value> byte_string ){
 
 	if(byte_string->IsString()){
 		String::Utf8Value value(isolate, byte_string);
@@ -297,32 +313,82 @@ std::string  MesiboJsProcessor::UnwrapParamString(Isolate* isolate, Local<Contex
 	Local<Value> value = GetParamValue(isolate, context, param_name, params);
 	Local<Value> len = v8::Integer::NewFromUnsigned(isolate, 0);
 
-	return UnwrapString(isolate, context, value, len);		
+	return UnwrapString(isolate, context, value);		
 }
 
-mesibo_message_params_t* MesiboJsProcessor::UnwrapMessageParams(Isolate* isolate, Local<Context> context,
+const char* GetCString(std::string s){
+	if(!s.empty())
+		return s.c_str();
+	else
+		return NULL;	
+}
+
+mesibo_message_params_t MesiboJsProcessor::UnwrapMessageParams(Isolate* isolate, Local<Context> context,
 		Local<Value> arg_params){
 
-	if(!arg_params->IsObject())
-		return NULL;
+	assert(arg_params->IsObject());
 
 	HandleScope scope(isolate);
 	Local<Object> params = arg_params->ToObject(context).ToLocalChecked();
 
-	mesibo_message_params_t* mp = (mesibo_message_params_t*)calloc(1, sizeof(mesibo_message_params_t));
+	mesibo_message_params_t mp ; 
 
-	mp->aid = UnwrapParamUint(isolate, context, MESSAGE_AID, params);	
-	mp->id = UnwrapParamUint(isolate, context, MESSAGE_ID, params);	
-	mp->refid = UnwrapParamUint(isolate, context, MESSAGE_REFID, params);	
-	mp->groupid = UnwrapParamUint(isolate, context, MESSAGE_GROUPID, params);	
-	mp->flags = UnwrapParamUint(isolate, context, MESSAGE_FLAGS, params);	
-	mp->type = UnwrapParamUint(isolate, context, MESSAGE_TYPE, params);	
-	mp->expiry = UnwrapParamUint(isolate, context, MESSAGE_EXPIRY, params);	
-	mp->to_online = UnwrapParamUint(isolate, context, MESSAGE_TO_ONLINE, params);	
-	mp->to = strdup(UnwrapParamString(isolate, context, MESSAGE_TO, params).c_str());	
-	mp->from = strdup(UnwrapParamString(isolate, context, MESSAGE_FROM, params).c_str());	
+	mp.aid = UnwrapParamUint(isolate, context, MESSAGE_AID, params);	
+	mp.id = UnwrapParamUint(isolate, context, MESSAGE_ID, params);	
+	mp.refid = UnwrapParamUint(isolate, context, MESSAGE_REFID, params);	
+	mp.groupid = UnwrapParamUint(isolate, context, MESSAGE_GROUPID, params);	
+	mp.flags = UnwrapParamUint(isolate, context, MESSAGE_FLAGS, params);	
+	mp.type = UnwrapParamUint(isolate, context, MESSAGE_TYPE, params);	
+	mp.expiry = UnwrapParamUint(isolate, context, MESSAGE_EXPIRY, params);	
+	mp.to_online = UnwrapParamUint(isolate, context, MESSAGE_TO_ONLINE, params);	
+	mp.to = strdup(UnwrapParamString(isolate, context, MESSAGE_TO, params).c_str());	
+	mp.from = strdup(UnwrapParamString(isolate, context, MESSAGE_FROM, params).c_str());	
 
 	return mp;
+}
+
+module_http_option_t MesiboJsProcessor::UnwrapHttpOptions(Isolate* isolate, Local<Context> context,
+		Local<Value> arg_options){
+
+	HandleScope scope(isolate);
+	Local<Object> options = arg_options->ToObject(context).ToLocalChecked();
+
+	module_http_option_t opt; 
+	
+	//Should allocate strings. These references are volatile
+	opt.proxy = GetCString(UnwrapParamString(isolate, context, HTTP_PROXY, options));
+	opt.content_type = GetCString(UnwrapParamString(isolate, context, HTTP_CONTENT_TYPE, options));
+	opt.extra_header = GetCString(UnwrapParamString(isolate, context, HTTP_EXTRA_HEADER, options));
+	opt.referrer = GetCString(UnwrapParamString(isolate, context, HTTP_REFERRER, options));
+	opt.origin = GetCString(UnwrapParamString(isolate, context, HTTP_ORIGIN, options));
+	opt.cookie = GetCString(UnwrapParamString(isolate, context, HTTP_COOKIE, options));
+	opt.encoding = GetCString(UnwrapParamString(isolate, context, HTTP_ENCODING, options));
+	opt.cache_control = GetCString(UnwrapParamString(isolate, context, HTTP_CACHE_CONTROL, options));
+	opt.accept = GetCString(UnwrapParamString(isolate, context, HTTP_ACCEPT, options));
+	opt.etag = GetCString(UnwrapParamString(isolate, context, HTTP_ETAG, options));
+
+	return opt;
+}
+
+
+http_context_t* MesiboJsProcessor::BundleHttpCallback(Isolate* isolate, 
+		Local<Context> context, Local<Value> js_cb, 
+		Local<Value> js_cbdata){
+
+	v8::Isolate::Scope isolateScope(isolate);
+	// Create a handle scope to keep the temporary object references.
+	HandleScope handle_scope(isolate);
+
+	if(!js_cb->IsFunction())
+		return NULL;
+
+	http_context_t* hc = (http_context_t*)calloc(1, sizeof(http_context_t));
+       	//Use in CallAsFunction method in mesibo_http_callback
+	hc->http_cb = js_cb->ToObject(context).ToLocalChecked();
+	hc->http_cbdata = js_cbdata;
+	hc->http_ctx = context;
+
+	return hc; //The caller is responsible for freeing this pointer
 }
 
 void MesiboJsProcessor::LogCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
@@ -356,20 +422,125 @@ void MesiboJsProcessor::MessageCallback(const v8::FunctionCallbackInfo<v8::Value
 	Local<Value> arg_len = args[2];
 
 	mesibo_module_t* mod;
-	mesibo_message_params_t* p;
+	mesibo_message_params_t p;
 	std::string message;
 	mesibo_uint_t len;
 
 	mod = static_cast<mesibo_module_t*>(mod_cb->Value()); 
 
 	p = UnwrapMessageParams(isolate, context, arg_params);
-	message = UnwrapString(isolate, context, arg_message, arg_len); //Pass len, and get raw bytes
+	message = UnwrapString(isolate, context, arg_message); //Pass len, and get raw bytes
 	len = UnwrapUint(isolate, context, arg_len);
 
-	mesibo_message(mod, p, message.c_str(), strlen(message.c_str()));
+	mesibo_message(mod, &p, message.c_str(), strlen(message.c_str()));
 		
-	free(p); //Free allocation in UnwrapMessageParams 
-};
+}
+
+void mesibo_js_destroy_http_context(http_context_t* mc){
+        free(mc);
+}
+
+/**
+ * HTTP Callback function
+ * Response to a POST request is recieved through this callback
+ * Once the complete response is received it is sent the callback defined in Javascipt
+ */
+int MesiboJsProcessor::mesibo_http_callback(void *cbdata, mesibo_int_t state,
+		mesibo_int_t progress, const char *buffer,
+		mesibo_int_t size) {
+
+	http_context_t *b = (http_context_t *)cbdata;
+	MesiboJsProcessor* mp = (MesiboJsProcessor*)b->ctx_;
+	Isolate* isolate = mp->GetIsolate();
+
+	mesibo_module_t* mod_ = mp->mod_;
+	int log_ = mp->log_;
+
+	if (0 > progress) {
+		mesibo_log(mod_, log_, " Error in http callback \n");
+		mesibo_js_destroy_http_context(b);
+		return MESIBO_RESULT_FAIL;
+	}
+
+	if (MODULE_HTTP_STATE_RESPBODY != state) {
+		mesibo_log(mod_, log_, " Exit http callback \n");
+		if(size)
+			mesibo_log(mod_, log_, "%.*s \n", size, buffer);
+		return MESIBO_RESULT_OK;
+	}
+
+	if ((0 < progress) && (MODULE_HTTP_STATE_RESPBODY == state)) {
+		if(HTTP_BUFFER_LEN < (b->datalen + size )){
+			mesibo_log(mod_, log_, "%s :"
+					" Error http callback :Buffer overflow detected \n", mod_->name);
+			mesibo_js_destroy_http_context(b);
+			return MESIBO_RESULT_FAIL;
+		}
+		memcpy(b->buffer + b->datalen, buffer, size);
+		b->datalen += size;
+	}
+
+	if (100 == progress) {
+		mesibo_log(mod_, log_, "%.*s", b->datalen, b->buffer);
+		mesibo_log(mod_, log_, "\n JS Callback %s %p \n", b->http_cbdata, b->http_cb);
+		
+		//TO-DO: What if cb_data is itself an array, ie; argv[[],..]
+		int argc = 3;
+		Local<Value> argv[3];
+		argv[0] = b->http_cbdata;
+		argv[1] = v8::String::NewFromUtf8(isolate, b->buffer).ToLocalChecked();
+		argv[2] = v8::Integer::NewFromUnsigned(isolate, b->datalen); //use utils to check for errors
+		
+		//Sub module to CallJsFunction, error check
+		v8::TryCatch tryCatch(isolate);
+		Local<Value> result;
+                if(!b->http_cb->CallAsFunction(b->http_ctx, b->http_ctx->Global(), argc, argv)
+				.ToLocal(&result)){
+                        mesibo_log(mod_, log_, "http call back failed");
+                        return MESIBO_RESULT_FAIL;
+                }
+		
+		mesibo_js_destroy_http_context(b);
+	}
+
+	return MESIBO_RESULT_OK;
+}
+
+void MesiboJsProcessor::HttpCallback(const v8::FunctionCallbackInfo<v8::Value>& args){
+	
+	cout << "HTTP....." <<endl;	
+	if (args.Length() < 1) return;
+	Isolate* isolate = args.GetIsolate();
+	HandleScope scope(isolate);
+
+	v8::Local<v8::Context> context = Context::New(isolate);
+	Context::Scope context_scope(context);
+
+	Local<External> mod_cb = args.Data().As<External>();
+	//TBD: This can be reference to v8 object.From there we can take mod
+	
+
+	mesibo_module_t* mod = static_cast<mesibo_module_t*>(mod_cb->Value()); 
+	std::string url = UnwrapString(isolate, context, args[0]); 
+	std::string post = UnwrapString(isolate, context, args[1]); 
+	
+	//Bundle the Js function http callback data 
+	Local<Value> js_cb = args[2];//The Js callback function reference
+	Local<Value> js_cbdata = args[3]; //The Js callback data (arbitrary)	
+	void* cbdata = (void*)BundleHttpCallback(isolate, context, js_cb, js_cbdata); 
+	//Be sure to Cleanup alloc
+	
+	module_http_option_t* opt = NULL;	
+	
+	if(args[4]->IsObject()){
+		module_http_option_t js_opt; 
+		js_opt = UnwrapHttpOptions(isolate, context, args[4]);
+		opt = &js_opt;		
+	}
+
+	mesibo_http(mod, url.c_str(), post.c_str(), mesibo_http_callback, cbdata, opt);
+
+}
 
 int MesiboJsProcessor::Initialize(){
 	// Create a handle scope to hold the temporary references.
@@ -380,16 +551,21 @@ int MesiboJsProcessor::Initialize(){
 
 	Local<ObjectTemplate> global = ObjectTemplate::New(GetIsolate());
 
-	global->Set(String::NewFromUtf8(GetIsolate(), "log", NewStringType::kNormal)
+	global->Set(String::NewFromUtf8(GetIsolate(), MESIBO_MODULE_LOG, NewStringType::kNormal)
 			.ToLocalChecked(),
 			FunctionTemplate::New(GetIsolate(), 
 				LogCallback, External::New(GetIsolate(), (void*)mod_)));
 
-	global->Set(String::NewFromUtf8(GetIsolate(), "message", NewStringType::kNormal)
+	global->Set(String::NewFromUtf8(GetIsolate(), MESIBO_MODULE_MESSAGE, NewStringType::kNormal)
 			.ToLocalChecked(),
 			FunctionTemplate::New(GetIsolate(),
 				MessageCallback, External::New(GetIsolate(), (void*)mod_)));
 
+	global->Set(String::NewFromUtf8(GetIsolate(), MESIBO_MODULE_HTTP, NewStringType::kNormal)
+			.ToLocalChecked(),
+			FunctionTemplate::New(GetIsolate(),
+				HttpCallback, External::New(GetIsolate(), (void*)mod_)));
+	
 	// Each module script gets its own context so different script calls don't
 	// affect each other. Context::New returns a persistent handle which
 	// is what we need for the reference to remain after we return from
