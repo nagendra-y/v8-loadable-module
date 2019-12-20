@@ -191,10 +191,10 @@ class MesiboJsProcessor {
 				Local<Context> context, const char* param_name,
 				Local<Object>params);
 
-		static mesibo_uint_t UnWrapUint(Isolate* isolate,
+		static mesibo_uint_t UnwrapUint(Isolate* isolate,
 				Local<Context>context, Local<Value>integer); 
 
-		static std::string UnWrapString(Isolate* isolate, 
+		static std::string UnwrapString(Isolate* isolate, 
 				Local<Context> context, Local<Value> byte_string, 
 				Local<Value>len);
 
@@ -233,7 +233,7 @@ typedef struct http_context_s {
 	module_http_option_t* http_opt;
 } http_context_t;
 
-mesibo_uint_t MesiboJsProcessor::UnWrapUint(Isolate* isolate, Local<Context>context, 
+mesibo_uint_t MesiboJsProcessor::UnwrapUint(Isolate* isolate, Local<Context>context, 
 		Local<Value>integer){ 
 
 	double value;
@@ -246,7 +246,7 @@ mesibo_uint_t MesiboJsProcessor::UnWrapUint(Isolate* isolate, Local<Context>cont
 	return 0;
 }
 
-std::string MesiboJsProcessor::UnWrapString(Isolate* isolate, Local<Context> context, 
+std::string MesiboJsProcessor::UnwrapString(Isolate* isolate, Local<Context> context, 
 		Local<Value> byte_string , Local<Value>len){
 
 	if(byte_string->IsString()){
@@ -284,7 +284,7 @@ mesibo_uint_t MesiboJsProcessor::UnwrapParamUint(Isolate* isolate, Local<Context
 
 	Local<Value> value = GetParamValue(isolate, context, param_name, params);
 
-	return UnWrapUint(isolate, context, value);		
+	return UnwrapUint(isolate, context, value);		
 }
 
 std::string  MesiboJsProcessor::UnwrapParamString(Isolate* isolate, Local<Context> context,     
@@ -297,7 +297,7 @@ std::string  MesiboJsProcessor::UnwrapParamString(Isolate* isolate, Local<Contex
 	Local<Value> value = GetParamValue(isolate, context, param_name, params);
 	Local<Value> len = v8::Integer::NewFromUnsigned(isolate, 0);
 
-	return UnWrapString(isolate, context, value, len);		
+	return UnwrapString(isolate, context, value, len);		
 }
 
 mesibo_message_params_t* MesiboJsProcessor::UnwrapMessageParams(Isolate* isolate, Local<Context> context,
@@ -334,10 +334,10 @@ void MesiboJsProcessor::LogCallback(const v8::FunctionCallbackInfo<v8::Value>& a
 
 	String::Utf8Value value(isolate, arg);
 
-	//This can be reference to v8 object
 	mesibo_module_t* mod =  static_cast<mesibo_module_t*>(mod_cb->Value()); 
-	mesibo_log(mod, MODULE_LOG_LEVEL_0VERRIDE , "Logged: %s\n", *value);
+	//v8_config_t* vc = (v8_config_t*)mod->ctx;
 
+	mesibo_log(mod, MODULE_LOG_LEVEL_0VERRIDE , "Logged: %s\n", *value);
 }
 
 void MesiboJsProcessor::MessageCallback(const v8::FunctionCallbackInfo<v8::Value>& args){
@@ -362,12 +362,13 @@ void MesiboJsProcessor::MessageCallback(const v8::FunctionCallbackInfo<v8::Value
 
 	mod = static_cast<mesibo_module_t*>(mod_cb->Value()); 
 
-
 	p = UnwrapMessageParams(isolate, context, arg_params);
-	message = UnWrapString(isolate, context, arg_message, arg_len); //Pass len, and get raw bytes
-	len = UnWrapUint(isolate, context, arg_len);
+	message = UnwrapString(isolate, context, arg_message, arg_len); //Pass len, and get raw bytes
+	len = UnwrapUint(isolate, context, arg_len);
 
 	mesibo_message(mod, p, message.c_str(), strlen(message.c_str()));
+		
+	free(p); //Free allocation in UnwrapMessageParams 
 };
 
 int MesiboJsProcessor::Initialize(){
@@ -484,7 +485,7 @@ Local<Object> MesiboJsProcessor::WrapMessageParams(Local<Context>& context, mesi
 //Note: Modify to take v8 string or directly the function reference, otherwise it has to fetch reference with every call
 int MesiboJsProcessor::ExecuteJsFunction(const char* func_name, int argc, Local<Value> argv[]){
 
-	mesibo_log(mod_, 0, "Executing function %s \n", func_name);
+	mesibo_log(mod_, log_, "Executing function %s \n", func_name);
 
 	v8::Isolate::Scope isolateScope(GetIsolate());
 
@@ -514,15 +515,15 @@ int MesiboJsProcessor::ExecuteJsFunction(const char* func_name, int argc, Local<
 
 		v8::TryCatch tryCatch(GetIsolate());
 		if(!js_fun->Call(context, context->Global(), argc, argv).ToLocal(&js_result)){
-			mesibo_log(mod_, 0, "%s call failed", func_name);
+			mesibo_log(mod_, log_, "%s call failed", func_name);
 			return MESIBO_RESULT_FAIL;
 		}
 
-		mesibo_log(mod_, 0, "%s returned %s \n", func_name, 
+		mesibo_log(mod_, log_, "%s returned %s \n", func_name, 
 				*(v8::String::Utf8Value(GetIsolate(), js_result)));
 
 	} else {
-		mesibo_log(mod_, 0, "%s is not a function \n", func_name); 
+		mesibo_log(mod_, log_, "%s is not a function \n", func_name); 
 		return MESIBO_RESULT_FAIL;
 	}
 	return MESIBO_RESULT_OK;
@@ -570,7 +571,7 @@ MesiboJsProcessor* mesibo_v8_init(mesibo_module_t* mod, v8_config_t* vc){
 	//v8::Isolate::Scope isolate_scope(isolate);
 	const char* script_path = strdup(vc->script);
 	int log_level = vc->log;
-
+	
 	MesiboJsProcessor* mesibo_js = new MesiboJsProcessor(mod, isolate, script_path, log_level);
 
 	mesibo_js->Initialize();
@@ -583,7 +584,7 @@ MesiboJsProcessor* mesibo_v8_init(mesibo_module_t* mod, v8_config_t* vc){
  **/
 mesibo_int_t MesiboJsProcessor::OnMessage(mesibo_message_params_t p, const char* message,
 		mesibo_uint_t len){
-	mesibo_log(mod_, 0, "OnMessage called\n");	
+	mesibo_log(mod_, log_, "OnMessage called\n");	
 
 	v8::Locker locker(GetIsolate());
 	v8::Isolate::Scope isolateScope(GetIsolate());
@@ -615,7 +616,7 @@ mesibo_int_t MesiboJsProcessor::OnMessage(mesibo_message_params_t p, const char*
  * Notify JS Callback function Mesibo_onMessageStatus
  **/
 mesibo_int_t MesiboJsProcessor::OnMessageStatus(mesibo_message_params_t p, mesibo_uint_t status){
-	mesibo_log(mod_, 0, "OnMessageStatus called\n");	
+	mesibo_log(mod_, log_, "OnMessageStatus called\n");	
 
 	v8::Locker locker(GetIsolate());
 
@@ -645,11 +646,13 @@ mesibo_int_t MesiboJsProcessor::OnMessageStatus(mesibo_message_params_t p, mesib
 
 static mesibo_int_t v8_on_message(mesibo_module_t *mod, mesibo_message_params_t *p, const char *message,
 		mesibo_uint_t len) {
-	mesibo_log(mod, 0, "================> %s on_message called\n", mod->name);
-	mesibo_log(mod, 0, " from %s to %s id %u message %s\n", p->from, p->to, (uint32_t) p->id, message);
 
 	v8_config_t* vc = (v8_config_t*)mod->ctx;
 	MesiboJsProcessor* mesibo_js = vc->ctx;
+	
+	mesibo_log(mod, vc->log,  "================> %s on_message called\n", mod->name);
+	mesibo_log(mod, vc->log, " from %s to %s id %u message %s\n", 
+			p->from, p->to, (uint32_t) p->id, message);
 	
 	// Clone Parameters
 	mesibo_message_params_t mp;
@@ -657,12 +660,6 @@ static mesibo_int_t v8_on_message(mesibo_module_t *mod, mesibo_message_params_t 
 	memcpy(&mp, p, sizeof(mesibo_message_params_t));
 	mp.to = p->to ? strdup(p->to): strdup("");
 	mp.from = strdup(p->from);
-	/**
-	mesibo_message_params_t* mp = (mesibo_message_params_t *)calloc(1, sizeof(mesibo_message_params_t));
-	memcpy(mp, p, sizeof(mesibo_message_params_t));
-	mp->to = strdup(p->to);
-	mp->from = strdup(p->from);
-	**/
 	
 	mesibo_js->OnMessage(mp, message, len);	
 
@@ -670,11 +667,11 @@ static mesibo_int_t v8_on_message(mesibo_module_t *mod, mesibo_message_params_t 
 }
 
 static mesibo_int_t v8_on_message_status(mesibo_module_t *mod, mesibo_message_params_t *p, mesibo_uint_t status) {
-	mesibo_log(mod, 0, "================>%s on_message_status called\n", mod->name);
-	mesibo_log(mod, 0, "to %s from %s id %u status %d\n", p->to, p->from, (uint32_t)p->id, status);
-
 	v8_config_t* vc = (v8_config_t*)mod->ctx;
 	MesiboJsProcessor* mesibo_js = vc->ctx;
+
+	mesibo_log(mod, vc->log, "================>%s on_message_status called\n", mod->name);
+	mesibo_log(mod, vc->log, "to %s from %s id %u status %d\n", p->to, p->from, (uint32_t)p->id, status);
 
 	// Clone Parameters
 	mesibo_message_params_t mp;
@@ -683,20 +680,13 @@ static mesibo_int_t v8_on_message_status(mesibo_module_t *mod, mesibo_message_pa
 	mp.to = p->to ? strdup(p->to): strdup("");
 	mp.from = strdup(p->from);
 	
-	/**
-	mesibo_message_params_t* mp = (mesibo_message_params_t *)calloc(1, sizeof(mesibo_message_params_t));
-	memcpy(mp, p, sizeof(mesibo_message_params_t));
-	mp->to = p->to ? strdup(p->to): strdup("");
-	mp->from = strdup(p->from);
-	**/
-
 	mesibo_js->OnMessageStatus(mp, status);	
 
 	return 0;
 }
 
 /**
- * Helper function for getting v8 configuration
+ * Helper function for getting v8 module configuration
  * Gets /path/to/script which contains Javascript code
  **/
 static v8_config_t* get_config_v8(mesibo_module_t* mod){
