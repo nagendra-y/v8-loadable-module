@@ -153,7 +153,7 @@ static mesibo_int_t skeleton_on_message(mesibo_module_t *mod, mesibo_message_par
  *
  */
 
-int mesibo_module_skeleton_init(mesibo_int_t version, mesibo_module_t *m, mesibo_uint_t len) {
+MESIBO_EXPORT int mesibo_module_skeleton_init(mesibo_int_t version, mesibo_module_t *m, mesibo_uint_t len) {
 	MESIBO_MODULE_SANITY_CHECK(m, version, len);
 
 	if(m->config) {

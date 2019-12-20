@@ -152,7 +152,8 @@ class IMesiboV8 {
 		//Callbacks to Javascript
 		mesibo_int_t notify_on_message(mesibo_message_params_t* p, const char* message,
 				mesibo_uint_t len);
-
+		mesibo_int_t notify_on_message_status(mesibo_message_params_t* p, mesibo_uint_t status);
+	
 	private:
 		int ExecuteScript(Local<String> script);
 		MaybeLocal<String> ReadFile(Isolate* isolate, const string& name);
@@ -169,7 +170,7 @@ class IMesiboV8 {
 		
 		//Utils
 		void Log(const char* format, const char* event);
-		Local<Object> mesibo_v8_utils_create_params(Local<Context>& context ,mesibo_message_params_t* p);
+		Local<Object> mesibo_v8_utils_create_params(Local<Context>& context , mesibo_message_params_t* p);
 
 		int mesibo_v8_utils_set_param_uint(Local<Context>& context, Local<Object> &js_params, 
 				const char* key, mesibo_uint_t value);
@@ -179,7 +180,7 @@ class IMesiboV8 {
 };
 
 void IMesiboV8::Log(const char* format, const char* event) {
-	mesibo_log(mod_,0, format , event);
+	mesibo_log(mod_, 0, format , event);
 }
 
 
@@ -203,7 +204,7 @@ typedef struct http_context_s {
 	module_http_option_t* http_opt;
 } http_context_t;
 
-static const mesibo_uint_t mesibo_v8_util_get_uint(Isolate* isolate,Local<Context>context, 
+static const mesibo_uint_t mesibo_v8_util_get_uint(Isolate* isolate, Local<Context>context, 
 		Local<Value>integer){ 
 	
 	double value;
@@ -333,22 +334,27 @@ void IMesiboV8::MessageCallback(const v8::FunctionCallbackInfo<v8::Value>& args)
 	//String::Utf8Value value(isolate, arg);
 	mod = static_cast<mesibo_module_t*>(mod_cb->Value()); 
 
-	mesibo_log(mod, 0, "====> Creating params for Sending Message \n");
 	
-	p= mesibo_v8_util_get_params(isolate, context, arg_params);
+	p = mesibo_v8_util_get_params(isolate, context, arg_params);
 	message = mesibo_v8_util_get_bytes(isolate, context, arg_message, arg_len); //Pass len, and get raw bytes
 	len = mesibo_v8_util_get_uint(isolate, context, arg_len);
  	
-	cout<< p->aid<< p->from << p->to << p->id << p->refid << p->groupid<< p->flags << p->type << p->expiry << p->to_online << message << len <<endl;
-/**	
-	mesibo_log(mod, 0, " aid %u from %s to %s id %u refid %u groupid %u flags %u type %u expiry %u to_online %u %u message %s len %u\n",
-			params->aid ,params->from, params->to, params->id,params->refid,
-			params->groupid, params->flags, params->type, params->expiry, 
-			params->to_online, message.c_str(), len);
-**/	
-	mesibo_log(mod, 0, "====> Sending Message");
-//	int rv = mesibo_message(mod, p, message.c_str(), len);
-	//cout << rv << endl;
+	cout<< p->aid<< endl;
+	cout<< p->from <<endl;
+       	cout<< p->to << endl;
+	cout<< p->id << endl;
+       	cout<< p->refid << endl;
+       	cout<< p->groupid << endl;
+       	cout<< p->flags << endl;
+       	cout<< p->type << endl;
+       	cout<< p->expiry << endl;
+       	cout<< p->to_online << endl;
+       	cout<< message <<endl;
+       	cout<< len <<endl;
+	
+	mesibo_log(mod, 0, "====> Sending Message , mod %p\n", mod);
+	
+	mesibo_message(mod, p, message.c_str(), strlen(message.c_str()));
 };
 
 int IMesiboV8::Initialize(){
@@ -495,11 +501,11 @@ int IMesiboV8::ExecuteJsFunction(const char* func_name, int argc, Local<Value> a
 			return MESIBO_RESULT_FAIL;
 		}
 
-		mesibo_log(mod_,0,"%s returned %s \n", func_name, 
+		mesibo_log(mod_, 0, "%s returned %s \n", func_name, 
 				*(v8::String::Utf8Value(GetIsolate(), js_result)));
 
 	} else {
-		mesibo_log(mod_,0,"%s is not a function \n", func_name); 
+		mesibo_log(mod_, 0, "%s is not a function \n", func_name); 
 		return MESIBO_RESULT_FAIL;
 	}
 	return MESIBO_RESULT_OK;
@@ -556,9 +562,7 @@ IMesiboV8* mesibo_v8_init(mesibo_module_t* mod, v8_config_t* vc){
 
 /**
  * Notify JS Callback function Mesibo_onMessage
- * Push parmeters as objects into the duktape stack and evaluate
  **/
-
 mesibo_int_t IMesiboV8::notify_on_message(mesibo_message_params_t* p, const char* message,
 		mesibo_uint_t len){
 	mesibo_log(mod_, 0, "notify_on_message called\n");	
@@ -575,14 +579,45 @@ mesibo_int_t IMesiboV8::notify_on_message(mesibo_message_params_t* p, const char
 	Context::Scope context_scope(context);
 
 	v8::Handle<v8::Value> args_bundle[3];
-	v8::Local<v8::Object> params = mesibo_v8_utils_create_params(context,p); // Don't pass context
+	v8::Local<v8::Object> params = mesibo_v8_utils_create_params(context, p); // Don't pass context
 	//Replace with something like GetCurrentContext
 
 	args_bundle[0] = params; 
 	args_bundle[1] = v8::String::NewFromUtf8(GetIsolate(), message).ToLocalChecked();
 	args_bundle[2] = v8::Integer::NewFromUnsigned(GetIsolate(), len); //use utils to check for errors
 
-	ExecuteJsFunction("Mesibo_onMessage", 3, args_bundle);
+	ExecuteJsFunction(MESIBO_LISTENER_ON_MESSAGE , 3, args_bundle);
+
+	//Return whatever JS Callback is returning, But that would mean blocking until return value
+	return MESIBO_RESULT_OK;
+
+}
+
+/**
+ * Notify JS Callback function Mesibo_onMessageStatus
+ **/
+mesibo_int_t IMesiboV8::notify_on_message_status(mesibo_message_params_t* p, mesibo_uint_t status){
+	mesibo_log(mod_, 0, "notify_on_message_status called\n");	
+
+	v8::Locker locker(GetIsolate());
+	v8::Isolate::Scope isolateScope(GetIsolate());
+
+	// Create a handle scope to keep the temporary object references.
+	HandleScope handle_scope(GetIsolate());
+
+	//To each it's own context
+	v8::Local<v8::Context> context = v8::Local<v8::Context>::New(GetIsolate(), context_);
+
+	Context::Scope context_scope(context);
+
+	v8::Handle<v8::Value> args_bundle[2];
+	v8::Local<v8::Object> params = mesibo_v8_utils_create_params(context, p); // Don't pass context
+	//Replace with something like GetCurrentContext
+
+	args_bundle[0] = params; 
+	args_bundle[1] = v8::Integer::NewFromUnsigned(GetIsolate(), status); //use utils to check for errors
+
+	ExecuteJsFunction(MESIBO_LISTENER_ON_MESSAGE_STATUS, 2, args_bundle);
 
 	//Return whatever JS Callback is returning, But that would mean blocking until return value
 	return MESIBO_RESULT_OK;
@@ -591,28 +626,29 @@ mesibo_int_t IMesiboV8::notify_on_message(mesibo_message_params_t* p, const char
 
 static mesibo_int_t v8_on_message(mesibo_module_t *mod, mesibo_message_params_t *p, const char *message,
 		mesibo_uint_t len) {
-	mesibo_log(mod, 0, "================> %s on_message called\n", mod->name);
+	mesibo_log(mod, 0, "================> mod %p %s on_message called\n", mod, mod->name);
 	mesibo_log(mod, 0, " from %s to %s id %u message %s\n", p->from, p->to, (uint32_t) p->id, message);
-	 
-	//don't modify original as other module will be use it 
-	mesibo_message_params_t np;
-	memcpy(&np, p, sizeof(mesibo_message_params_t));
-	np.to = p->from;
-	np.from = p->to;
-	np.id = rand();
-	const char* test_message = "Hello from V8 Module";
-
-        mesibo_message(mod, &np, test_message, strlen(message));
-
-
-
+	
 	v8_config_t* vc = (v8_config_t*)mod->ctx;
 	IMesiboV8* mesibo_js = vc->ctx;
 	mesibo_message_params_t* mp = (mesibo_message_params_t *)calloc(1, sizeof(mesibo_message_params_t));
 	memcpy(mp, p, sizeof(mesibo_message_params_t));
-	//mesibo_js->notify_on_message(mp, message, len);	
-	
+	mesibo_js->notify_on_message(mp, message, len);	
+
 	return MESIBO_RESULT_PASS; 
+}
+
+static mesibo_int_t v8_on_message_status(mesibo_module_t *mod, mesibo_message_params_t *p, mesibo_uint_t status) {
+        mesibo_log(mod, 0, " %s on_message_status called\n", mod->name);
+        mesibo_log(mod, 0, " from %s id %u status %d\n", p->from, (uint32_t)p->id, status);
+        
+	v8_config_t* vc = (v8_config_t*)mod->ctx;
+	IMesiboV8* mesibo_js = vc->ctx;
+	mesibo_message_params_t* mp = (mesibo_message_params_t *)calloc(1, sizeof(mesibo_message_params_t));
+	memcpy(mp, p, sizeof(mesibo_message_params_t));
+	mesibo_js->notify_on_message_status(mp, status);	
+
+	return 0;
 }
 
 /**
@@ -662,6 +698,7 @@ MESIBO_EXPORT int mesibo_module_v8_init(mesibo_int_t version, mesibo_module_t *m
 	m->flags = 0;
 	m->description = strdup("Sample V8 Module");
 	m->on_message= v8_on_message;
+	m->on_message_status = v8_on_message_status;
 
 	return MESIBO_RESULT_OK;
 }
