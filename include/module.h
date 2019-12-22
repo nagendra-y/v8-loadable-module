@@ -48,10 +48,10 @@ typedef struct mesibo_module_s mesibo_module_t;
 typedef intptr_t        mesibo_int_t;
 typedef uintptr_t  	mesibo_uint_t;
 typedef int(*mesibo_module_init_fn)(mesibo_int_t version, mesibo_module_t *mod, mesibo_int_t len);
-typedef int (*mesibo_module_http_data_callback_t)(void *cbdata, mesibo_int_t state, mesibo_int_t progress, const char *buffer, mesibo_int_t size);
+typedef int (*mesibo_http_data_callback_t)(void *cbdata, mesibo_int_t state, mesibo_int_t progress, const char *buffer, mesibo_int_t size);
 typedef enum {MODULE_HTTP_STATE_REQUEST, MODULE_HTTP_STATE_REQBODY, MODULE_HTTP_STATE_RESPHEADER, MODULE_HTTP_STATE_RESPBODY, MODULE_HTTP_STATE_DONE} module_http_state_t;
 
-typedef struct _module_http_option_t {
+typedef struct _mesibo_http_option_t {
 	const char *proxy;
 
 	//body or post data
@@ -73,9 +73,41 @@ typedef struct _module_http_option_t {
 	mesibo_uint_t conn_timeout, header_timeout, body_timeout, total_timeout;
 
 	mesibo_uint_t retries;
-	mesibo_uint_t synchronous;
+//	mesibo_uint_t synchronous;
 
-} module_http_option_t;
+} mesibo_http_option_t;
+
+typedef int (*mesibo_fcgi_data_callback_t)(void *cbdata, mesibo_int_t result, const char *buffer, mesibo_int_t size);
+
+typedef struct mesibo_fcgi_s {
+	char *USER;
+	char *SCRIPT_FILENAME;
+	char *QUERY_STRING;
+	char *CONTENT_TYPE;
+	char *SCRIPT_NAME;
+	char *REQUEST_URI;
+	char *DOCUMENT_URI;
+	char *DOCUMENT_ROOT;
+	char *SERVER_PROTOCOL;
+	char *REQUEST_SCHEME;
+	char *REMOTE_ADDR;
+	char *REMOTE_PORT;
+	char *SERVER_ADDR;
+	char *SERVER_PORT;
+	char *SERVER_NAME;
+	char *HTTP_HOST;
+	char *HTTP_CONNECTION;
+	char *HTTP_CACHE_CONTROL;
+	char *HTTP_UPGRADE_INSECURE_REQUESTS;
+	char *HTTP_USER_AGENT;
+	char *HTTP_ACCEPT;
+	char *HTTP_ACCEPT_ENCODING;
+	char *HTTP_ACCEPT_LANGUAGE;
+
+	char *body;
+	uint64_t bodylen;
+
+} mesibo_fcgi_t;
 
 typedef struct mesibo_message_params_s {
 	mesibo_uint_t 	aid;
@@ -151,12 +183,15 @@ static mesibo_int_t mesibo_call_log(mesibo_module_t *mod, mesibo_uint_t level, c
 #endif
 
 MESIBO_EXPORT mesibo_int_t	mesibo_message(mesibo_module_t *mod, mesibo_message_params_t *params, const char *message, mesibo_uint_t len);
-MESIBO_EXPORT mesibo_int_t	mesibo_http(mesibo_module_t *mod, const char *url, const char *post, mesibo_module_http_data_callback_t cb, void *cbdata, module_http_option_t *opt);
 MESIBO_EXPORT mesibo_int_t	mesibo_log(mesibo_module_t *mod, mesibo_uint_t level, const char *format, ...);
-MESIBO_EXPORT mesibo_int_t	mesibo_usec();
-MESIBO_EXPORT char* mesibo_util_getconfig(mesibo_module_t* mod, const char* item_name);
-MESIBO_EXPORT char* mesibo_util_json_extract(char *src, const char *key, char **next);
-MESIBO_EXPORT void mesibo_util_create_thread(void *(*threadFunction) (void *), void *data, size_t stacksize, const char *name);
+
+// Utility functions
+MESIBO_EXPORT mesibo_int_t	mesibo_util_http(const char *url, const char *post, mesibo_http_data_callback_t cb, void *cbdata, mesibo_http_option_t *opt);
+MESIBO_EXPORT mesibo_int_t 	mesibo_util_fcgi(mesibo_fcgi_t *req, const char *host, mesibo_int_t port, mesibo_int_t keepalive, mesibo_fcgi_data_callback_t cb, void *cbdata);
+MESIBO_EXPORT char* 		mesibo_util_getconfig(mesibo_module_t* mod, const char* item_name);
+MESIBO_EXPORT char* 		mesibo_util_json_extract(char *src, const char *key, char **next);
+MESIBO_EXPORT void 		mesibo_util_create_thread(void *(*threadFunction) (void *), void *data, size_t stacksize, const char *name);
+MESIBO_EXPORT mesibo_int_t 	mesibo_util_usec();
 #ifdef __cplusplus 
 }
 #endif
