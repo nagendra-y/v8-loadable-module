@@ -668,7 +668,11 @@ int MesiboJsProcessor::Initialize(){
 	SetCallables(global);
 
 	Local<String> source = ReadFile(GetIsolate(), script_).ToLocalChecked();
+	
+	mesibo_int_t t1 = mesibo_util_usec();
 	int rv = ExecuteScript(source, global);
+	mesibo_int_t t2 = mesibo_util_usec();
+	mesibo_log(mod_, MODULE_LOG_LEVEL_0VERRIDE, "Time taken to execute script_ %u us\n", (uint32_t)(t2-t1));
 	if(MESIBO_RESULT_FAIL == rv){
 		mesibo_log(mod_, MODULE_LOG_LEVEL_0VERRIDE, "Error executing script %s\n", script_);
 		return MESIBO_RESULT_FAIL;
@@ -862,9 +866,13 @@ mesibo_int_t MesiboJsProcessor::OnMessage(mesibo_message_params_t p, const char*
 	args_bundle[0] = params; 
 	args_bundle[1] = v8::String::NewFromUtf8(GetIsolate(), message).ToLocalChecked();
 	args_bundle[2] = v8::Integer::NewFromUnsigned(GetIsolate(), len); //use utils to check for errors
-
+	
+	mesibo_int_t t1 =  mesibo_util_usec();
 	ExecuteJsFunction(context, MESIBO_LISTENER_ON_MESSAGE , 3, args_bundle);
-
+	mesibo_int_t t2 = mesibo_util_usec();
+	mesibo_log(mod_, MODULE_LOG_LEVEL_0VERRIDE, "Time taken to execute function %s is %u us\n",
+			MESIBO_LISTENER_ON_MESSAGE, (uint32_t)(t2-t1));
+	
 	//Return whatever JS Callback is returning, But that would mean blocking until return value
 	return MESIBO_RESULT_OK;
 
