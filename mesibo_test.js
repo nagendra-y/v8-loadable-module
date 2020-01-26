@@ -64,6 +64,7 @@ function test_http(){
 }
 
 function Mesibo_onMessage(message) {
+	message.when //Timestamp
 	message.data; //raw bytes
 	message.message; //string
 	
