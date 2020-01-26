@@ -54,6 +54,7 @@ function test_log(){}
 
 function Mesibo_onHttpResponse(http) {
 	http.response;
+	http.responseType;
 	http.responseText;
 	http.responseJSON;
 	http.result;
