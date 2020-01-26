@@ -18,11 +18,14 @@ function test_auto_reply(message){
 
 function test_message(){
 	var message = new Message();
-	message.to = "test_user_demo";
-	message.from = "js_user";
+	message.peer = "test_user_demo";
+	message.gid = 0;
 	message.expiry = 3600;
 	message.id = parseInt(Math.floor(2147483647*Math.random())) 
 	message.data = "testMessage";
+	message.enableReadReceipt()
+	message.enableDeliveryReceipt()
+	message.sendToOnline(true);
 	message.send();
 	message.sendbytes();
 }
