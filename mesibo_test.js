@@ -34,8 +34,19 @@ function test_message(){
 	message.message = "testMessage";
 	message.message = {}; //If JSON object stringify internally
 	message.data = []; //raw bytes
-	
 	message.send();
+	
+	message.id = parseInt(Math.floor(2147483647*Math.random()));
+	var myArray = new ArrayBuffer(512);
+        var longInt8View = new Uint8Array(myArray);
+
+        // generate some data
+        for (var i=0; i< longInt8View.length; i++) {
+                longInt8View[i] = i % 256;
+        }
+        message.data = longInt8View;
+	message.send();
+
 }
 
 function Mesibo_onMessage(message) {
