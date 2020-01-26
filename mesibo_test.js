@@ -26,6 +26,7 @@ function test_message(){
 	message.enableReadReceipt(true);
 	message.enableDeliveryReceipt(true);
 	message.expiry = 3600;
+	message.enablePresence(true);
 	message.sendIfOnline(true);
 	message.when = +new Date(); 
 	message.to = "test_user_demo";
