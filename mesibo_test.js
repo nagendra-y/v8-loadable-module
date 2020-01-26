@@ -23,8 +23,8 @@ function test_message(){
 	message.aid = 6323;
 	message.refid = 0;
 	message.gid = 0;
-	message.enableReadReceipt();
-	message.enableDeliveryReceipt();
+	message.enableReadReceipt(true);
+	message.enableDeliveryReceipt(true);
 	message.expiry = 3600;
 	message.sendIfOnline(true);
 	message.when = +new Date(); 
@@ -33,8 +33,6 @@ function test_message(){
 	message.message = "testMessage";
 	
 	message.send();
-	message.data; //raw bytes
-	message.sendbytes();
 }
 
 function Mesibo_onMessage(message) {
