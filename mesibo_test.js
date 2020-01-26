@@ -12,7 +12,7 @@ function test_auto_reply(message){
 	var tmp = message.to;
 	message.to = message.from;
 	message.from = tmp;
-	message.data = "This is an automated response";
+	message.message = "This is an automated response";
 	message.send();
 
 }
@@ -30,9 +30,10 @@ function test_message(){
 	message.when = +new Date(); 
 	message.to = "test_user_demo";
 	message.from = "js_user";
-	message.data = "testMessage";
+	message.message = "testMessage";
 	
 	message.send();
+	message.data; //raw bytes
 	message.sendbytes();
 }
 
