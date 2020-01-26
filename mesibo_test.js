@@ -31,6 +31,8 @@ function test_message(){
 	message.to = "test_user_demo";
 	message.from = "js_user";
 	message.message = "testMessage";
+	message.message = {}; //If JSON object stringify internally
+	message.data = []; //raw bytes
 	
 	message.send();
 }
@@ -66,6 +68,7 @@ function Mesibo_onTranslate(http) {
 function test_http(){
 	var http = new Http();
 	http.url = "https://app.mesibo.com/api.php";
+	http.post = {}; //JSON Object. Stringify internally
 	http.post = "op=test";	
 	http.contentType = 'application/xml';
 	http.header;
@@ -92,6 +95,7 @@ function test_http(){
 	
 	var tHttp = new Http();
 	tHttp.url = "https://translation.googleapis.com/language/translate/v2";
+	tHttp.post = {}; //JSON Object. Stringify internally
 	tHttp.post = "{\"q\":\"Who are you\", \"target\":\"de\"}";
 	tHttp.ondata = Mesibo_onTranslate;
 	tHttp.cbdata = "Google Translate";
