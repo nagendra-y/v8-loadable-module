@@ -25,7 +25,7 @@ function test_message(){
 	message.data = "testMessage";
 	message.enableReadReceipt()
 	message.enableDeliveryReceipt()
-	message.sendToOnline(true);
+	message.sendIfOnline(true);
 	message.send();
 	message.sendbytes();
 }
