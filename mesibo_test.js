@@ -22,7 +22,7 @@ function test_message(){
 	message.id = parseInt(Math.floor(2147483647*Math.random()));
 	message.aid = 6323;
 	message.refid = 0;
-	message.gid = 0;
+	message.groupid = 0;
 	message.enableReadReceipt(true);
 	message.enableDeliveryReceipt(true);
 	message.expiry = 3600;
