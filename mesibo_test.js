@@ -110,7 +110,6 @@ function Socket_onConnect(socket){
 }
 
 function Socket_onData(socket){
-	socket.stringData;
 	socket.data;
 	socket.length;
 }
