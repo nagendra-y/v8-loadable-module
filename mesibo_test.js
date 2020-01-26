@@ -24,11 +24,17 @@ function test_message(){
 	message.id = parseInt(Math.floor(2147483647*Math.random())) 
 	message.data = "testMessage";
 	message.send();
+	message.sendbytes();
 }
 
 function test_log(){}
 
-function Mesibo_onHttpResponse(http) {}
+function Mesibo_onHttpResponse(http) {
+	http.response;
+	http.responseText;
+	http.responseJSON;
+	http.result;
+}
 
 function Mesibo_onTranslate(http) {
 	var response  = http.responseJSON;
@@ -55,6 +61,9 @@ function test_http(){
 }
 
 function Mesibo_onMessage(message) {
+	message.data; //raw bytes
+	message.message; //string
+	
 	test_auto_reply(message);
 	test_http();
 	test_socket();
@@ -65,10 +74,15 @@ function Mesibo_onMessageStatus(message) {
 	return mesibo.RESULT_OK; 
 }
 
+function Socket_onConnect(socket){
+	socket.write("SOCKET DATA");
+}
 
-function Socket_onConnect(socket){}
-
-function Socket_onData(socket){}
+function Socket_onData(socket){
+	socket.stringData;
+	socket.data;
+	socket.length;
+}
 
 function test_socket(){
 	var sock = new Socket();
