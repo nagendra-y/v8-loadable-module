@@ -31,7 +31,7 @@ function Mesibo_onMessage(message) {
         var request_body = {
                 "queryInput": {
                         "text": {
-                                "text": message.message",
+                                "text": message.message,
                                 "languageCode" : "en"
                         }
                 }
