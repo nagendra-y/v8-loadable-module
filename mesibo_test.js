@@ -6,6 +6,7 @@ function initialize(){
 	mesibo.onmessage = Mesibo_onMessage;
 	mesibo.onmessagestatus = Mesibo_onMessageStatus;
 	mesibo.onlogin = Mesibo_onLogin;
+	mesibo.onexception = Mesibo_onException;
 }
 
 function test_auto_reply(message){
@@ -143,5 +144,9 @@ function test_socket(){
 function Mesibo_onLogin(user){
 	user.online;
 	user.address;
+}
+
+function Mesibo_onException(exception){
+	mesibo.log(exception);
 }
 
