@@ -84,8 +84,7 @@ function test_http(){
 	http.post = {}; //JSON Object. Stringify internally
 	http.post = "op=test";	
 	http.contentType = 'application/xml';
-	http.header;
-	http.extraHeaders;
+	http.headers;
 	http.userAgent;
 	http.referrer;
 	http.origin;
@@ -112,7 +111,7 @@ function test_http(){
 	tHttp.post = "{\"q\":\"Who are you\", \"target\":\"de\"}";
 	tHttp.ondata = Mesibo_onTranslate;
 	tHttp.cbdata = "Google Translate";
-	tHttp.extraHeaders = "Authorization: Bearer ya29.c.Kl66B3ReS77KYYMi1vG_-gQa0fnN9vlJB_rfdKLrYD1aJCYSsiLnmOpbM8gQYqpEqXigz26It6n04r0yfv7mHUdhpgATBFbqeA63qr3yRNFTzNV9nqtl3fA7AMLzWYqW";
+	tHttp.headers = "Authorization: Bearer ya29.c.Kl66B3ReS77KYYMi1vG_-gQa0fnN9vlJB_rfdKLrYD1aJCYSsiLnmOpbM8gQYqpEqXigz26It6n04r0yfv7mHUdhpgATBFbqeA63qr3yRNFTzNV9nqtl3fA7AMLzWYqW";
 	tHttp.contentType = 'application/json';
 	tHttp.send();	
 }
